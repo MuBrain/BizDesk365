@@ -11,6 +11,9 @@ import EnterpriseBrain from "@/pages/EnterpriseBrain";
 import AIGovernance from "@/pages/AIGovernance";
 import Settings from "@/pages/Settings";
 import PowerPlatformGovernance from "@/pages/PowerPlatformGovernance";
+import WorkshopDetail from "@/pages/WorkshopDetail";
+import PPActions from "@/pages/PPActions";
+import PPDecisions from "@/pages/PPDecisions";
 
 // Layout
 import SidebarLayout from "@/layout/SidebarLayout";
@@ -133,6 +136,9 @@ const AppRoutes = () => {
         <Route path="dashboards/enterprise-brain" element={<EnterpriseBrain />} />
         <Route path="dashboards/ai-governance" element={<AIGovernance />} />
         <Route path="dashboards/power-platform" element={<PowerPlatformGovernance />} />
+        <Route path="dashboards/power-platform/workshops/:workshopNumber" element={<WorkshopDetail />} />
+        <Route path="dashboards/power-platform/actions" element={<PPActions />} />
+        <Route path="dashboards/power-platform/decisions" element={<PPDecisions />} />
         <Route path="settings" element={<Settings />} />
       </Route>
       
