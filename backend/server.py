@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -15,6 +15,9 @@ import uuid
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Import Power Platform seed data
+from power_platform_seed import WORKSHOP_DEFINITIONS, ITEM_DEFINITIONS, get_items_for_workshop
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -153,6 +156,160 @@ class HealthStatus(BaseModel):
     message: str
     module_enabled: bool
 
+# ============== Power Platform Models ==============
+
+class PPWorkshopDefinition(BaseModel):
+    workshop_number: int
+    title: str
+    description: str
+    completion_criteria: List[str]
+
+class PPItemDefinition(BaseModel):
+    item_id: str
+    workshop_number: int
+    title: str
+    module_name: str
+    status_requirement: str
+    user_story_fr: str
+    acceptance_criteria: List[str]
+
+class PPProgram(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    status: str  # not_started, in_progress, completed
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    created_by: str
+    created_at: str
+    updated_at: str
+
+class PPWorkshopInstance(BaseModel):
+    id: str
+    program_id: str
+    workshop_number: int
+    status: str  # not_started, in_progress, completed
+    completion_criteria_state: Dict[str, bool] = {}
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+class PPItemInstance(BaseModel):
+    id: str
+    program_id: str
+    item_id: str
+    workshop_number: int
+    status: str  # not_started, in_progress, done, validated
+    owner_user_id: Optional[str] = None
+    due_date: Optional[str] = None
+    notes_markdown: Optional[str] = None
+    acceptance_state: Dict[str, bool] = {}
+    done_override: bool = False
+    validated_by: Optional[str] = None
+    validated_at: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+class PPAction(BaseModel):
+    id: str
+    program_id: str
+    workshop_number: Optional[int] = None
+    item_id: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    priority: str  # low, medium, high, critical
+    status: str  # open, in_progress, done, closed
+    owner_user_id: Optional[str] = None
+    due_date: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+class PPDecision(BaseModel):
+    id: str
+    program_id: str
+    workshop_number: Optional[int] = None
+    item_id: Optional[str] = None
+    decision_text: str
+    decided_by: str
+    decided_at: str
+    evidence_links: List[str] = []
+    created_at: str
+
+class PPEvidence(BaseModel):
+    id: str
+    program_id: str
+    workshop_number: Optional[int] = None
+    item_id: Optional[str] = None
+    evidence_type: str  # document, link, screenshot, file
+    title: str
+    url: Optional[str] = None
+    file_id: Optional[str] = None
+    date: str
+    owner_user_id: Optional[str] = None
+    created_at: str
+
+class PPKPIs(BaseModel):
+    workshop_completion_pct: float
+    workshops_completed: int
+    total_workshops: int
+    items_total: int
+    items_done: int
+    items_validated: int
+    items_in_progress: int
+    items_not_started: int
+    actions_open_count: int
+    actions_ageing_avg_days: float
+    actions_ageing_max_days: int
+    decisions_count: int
+    evidence_count: int
+    ownership_missing_pct: float
+
+# ============== Update/Create Models ==============
+
+class PPItemInstanceUpdate(BaseModel):
+    status: Optional[str] = None
+    owner_user_id: Optional[str] = None
+    due_date: Optional[str] = None
+    notes_markdown: Optional[str] = None
+    acceptance_state: Optional[Dict[str, bool]] = None
+    done_override: Optional[bool] = None
+
+class PPItemInstanceValidate(BaseModel):
+    validated: bool
+
+class PPWorkshopUpdate(BaseModel):
+    status: Optional[str] = None
+    completion_criteria_state: Optional[Dict[str, bool]] = None
+
+class PPActionCreate(BaseModel):
+    workshop_number: Optional[int] = None
+    item_id: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    priority: str = "medium"
+    owner_user_id: Optional[str] = None
+    due_date: Optional[str] = None
+
+class PPActionUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    owner_user_id: Optional[str] = None
+    due_date: Optional[str] = None
+
+class PPDecisionCreate(BaseModel):
+    workshop_number: Optional[int] = None
+    item_id: Optional[str] = None
+    decision_text: str
+    evidence_links: List[str] = []
+
+class PPEvidenceCreate(BaseModel):
+    workshop_number: Optional[int] = None
+    item_id: Optional[str] = None
+    evidence_type: str
+    title: str
+    url: Optional[str] = None
+
 # ============== Security ==============
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -212,9 +369,9 @@ MODULES: Dict[str, Module] = {
         feature_flags={}
     ),
     "power_platform": Module(
-        id="power_platform", name="Power Platform Governance", description="Gouvernance Microsoft Power Platform", enabled=False,
+        id="power_platform", name="Power Platform Governance", description="Gouvernance Microsoft Power Platform", enabled=True,
         nav_items=[NavItem(id="pp-overview", label="Power Platform", path="/dashboards/power-platform", icon="Zap")],
-        feature_flags={"monitoring": False, "policy_enforcement": False}
+        feature_flags={"monitoring": True, "policy_enforcement": True}
     )
 }
 
@@ -270,10 +427,176 @@ async def seed_database():
     
     await db.users.insert_one({
         "id": "user-001", "username": "demo@bizdesk365.local", "email": "demo@bizdesk365.local",
-        "password_hash": pwd_context.hash("demo"), "tenant_id": demo_tenant_id, "roles": ["admin", "user"]
+        "password_hash": pwd_context.hash("demo"), "tenant_id": demo_tenant_id, "roles": ["admin", "user", "PlatformOwner"]
     })
     
+    # Seed workshop and item definitions (global)
+    existing_workshops = await db.pp_workshop_definitions.find_one()
+    if not existing_workshops:
+        await db.pp_workshop_definitions.insert_many(WORKSHOP_DEFINITIONS)
+        await db.pp_item_definitions.insert_many(ITEM_DEFINITIONS)
+        logger.info("Power Platform definitions seeded")
+    
     logger.info("Database seeded successfully")
+
+# ============== Helper Functions for Power Platform ==============
+
+async def get_or_create_program(tenant_id: str, user_id: str) -> dict:
+    """Get or create a governance program for the tenant"""
+    program = await db.pp_programs.find_one({"tenant_id": tenant_id}, {"_id": 0})
+    
+    if not program:
+        now = datetime.now(timezone.utc).isoformat()
+        program = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "name": "Programme de Gouvernance Power Platform",
+            "status": "not_started",
+            "start_date": None,
+            "end_date": None,
+            "created_by": user_id,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.pp_programs.insert_one(program)
+        
+        # Create workshop instances
+        for ws_def in WORKSHOP_DEFINITIONS:
+            criteria_state = {c: False for c in ws_def["completion_criteria"]}
+            workshop = {
+                "id": str(uuid.uuid4()),
+                "program_id": program["id"],
+                "workshop_number": ws_def["workshop_number"],
+                "status": "not_started",
+                "completion_criteria_state": criteria_state,
+                "started_at": None,
+                "completed_at": None
+            }
+            await db.pp_workshops.insert_one(workshop)
+        
+        # Create item instances
+        for item_def in ITEM_DEFINITIONS:
+            acceptance_state = {c: False for c in item_def["acceptance_criteria"]}
+            item = {
+                "id": str(uuid.uuid4()),
+                "program_id": program["id"],
+                "item_id": item_def["item_id"],
+                "workshop_number": item_def["workshop_number"],
+                "status": "not_started",
+                "owner_user_id": None,
+                "due_date": None,
+                "notes_markdown": None,
+                "acceptance_state": acceptance_state,
+                "done_override": False,
+                "validated_by": None,
+                "validated_at": None,
+                "created_at": now,
+                "updated_at": now
+            }
+            await db.pp_item_instances.insert_one(item)
+        
+        logger.info(f"Created new program for tenant {tenant_id}")
+    
+    return program
+
+async def calculate_pp_kpis(program_id: str) -> dict:
+    """Calculate KPIs for a program"""
+    now = datetime.now(timezone.utc)
+    
+    # Get workshops
+    workshops = await db.pp_workshops.find({"program_id": program_id}, {"_id": 0}).to_list(100)
+    workshops_completed = sum(1 for w in workshops if w["status"] == "completed")
+    
+    # Get items
+    items = await db.pp_item_instances.find({"program_id": program_id}, {"_id": 0}).to_list(1000)
+    items_total = len(items)
+    items_done = sum(1 for i in items if i["status"] == "done")
+    items_validated = sum(1 for i in items if i["status"] == "validated")
+    items_in_progress = sum(1 for i in items if i["status"] == "in_progress")
+    items_not_started = sum(1 for i in items if i["status"] == "not_started")
+    
+    # Get actions
+    actions = await db.pp_actions.find({"program_id": program_id}, {"_id": 0}).to_list(10000)
+    open_actions = [a for a in actions if a["status"] in ["open", "in_progress"]]
+    actions_open_count = len(open_actions)
+    
+    # Calculate ageing
+    ageing_days = []
+    for action in open_actions:
+        try:
+            created = datetime.fromisoformat(action["created_at"].replace("Z", "+00:00"))
+            days = (now - created).days
+            ageing_days.append(days)
+        except:
+            pass
+    
+    actions_ageing_avg_days = sum(ageing_days) / len(ageing_days) if ageing_days else 0
+    actions_ageing_max_days = max(ageing_days) if ageing_days else 0
+    
+    # Get decisions and evidence
+    decisions = await db.pp_decisions.find({"program_id": program_id}, {"_id": 0}).to_list(10000)
+    evidence = await db.pp_evidence.find({"program_id": program_id}, {"_id": 0}).to_list(10000)
+    
+    # Calculate ownership missing
+    items_without_owner = sum(1 for i in items if not i.get("owner_user_id"))
+    actions_without_owner = sum(1 for a in open_actions if not a.get("owner_user_id"))
+    total_items_and_actions = items_total + len(open_actions)
+    ownership_missing_pct = ((items_without_owner + actions_without_owner) / total_items_and_actions * 100) if total_items_and_actions > 0 else 0
+    
+    return {
+        "workshop_completion_pct": round(workshops_completed / 10 * 100, 1),
+        "workshops_completed": workshops_completed,
+        "total_workshops": 10,
+        "items_total": items_total,
+        "items_done": items_done,
+        "items_validated": items_validated,
+        "items_in_progress": items_in_progress,
+        "items_not_started": items_not_started,
+        "actions_open_count": actions_open_count,
+        "actions_ageing_avg_days": round(actions_ageing_avg_days, 1),
+        "actions_ageing_max_days": actions_ageing_max_days,
+        "decisions_count": len(decisions),
+        "evidence_count": len(evidence),
+        "ownership_missing_pct": round(ownership_missing_pct, 1)
+    }
+
+async def check_workshop_completion(program_id: str, workshop_number: int):
+    """Check if workshop should be marked as completed"""
+    workshop = await db.pp_workshops.find_one(
+        {"program_id": program_id, "workshop_number": workshop_number},
+        {"_id": 0}
+    )
+    if not workshop:
+        return
+    
+    # Check all completion criteria are checked
+    criteria_all_checked = all(workshop.get("completion_criteria_state", {}).values())
+    
+    # Check all mandatory items are done or validated
+    items = await db.pp_item_instances.find(
+        {"program_id": program_id, "workshop_number": workshop_number},
+        {"_id": 0}
+    ).to_list(100)
+    
+    # Get item definitions to check mandatory status
+    item_defs = {item["item_id"]: item for item in ITEM_DEFINITIONS if item["workshop_number"] == workshop_number}
+    
+    mandatory_items_complete = True
+    for item in items:
+        item_def = item_defs.get(item["item_id"])
+        if item_def and item_def["status_requirement"] == "OBLIGATOIRE":
+            if item["status"] not in ["done", "validated"]:
+                mandatory_items_complete = False
+                break
+    
+    if criteria_all_checked and mandatory_items_complete:
+        await db.pp_workshops.update_one(
+            {"program_id": program_id, "workshop_number": workshop_number},
+            {"$set": {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
 
 # ============== Routes ==============
 
@@ -437,10 +760,537 @@ async def update_ai_policy(policy: AIPolicy, tenant_id: str = Depends(get_tenant
     await db.ai_usage_policies.update_one({"tenant_id": tenant_id}, {"$set": {"min_iqi_authorized": policy.min_iqi_authorized, "min_iqi_assisted": policy.min_iqi_assisted}}, upsert=True)
     return policy
 
-# Power Platform stub
-@api_router.get("/power-platform/health", response_model=HealthStatus)
-async def get_power_platform_health(current_user: UserInDB = Depends(get_current_user)):
-    return HealthStatus(status="coming_soon", message="Module Power Platform Governance en cours de développement", module_enabled=False)
+# ============== Power Platform Governance Endpoints ==============
+
+@api_router.get("/power-platform/program")
+async def get_pp_program(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get or create the governance program for the tenant"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    return program
+
+@api_router.get("/power-platform/kpis", response_model=PPKPIs)
+async def get_pp_kpis(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get KPIs for the governance program"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    return await calculate_pp_kpis(program["id"])
+
+@api_router.get("/power-platform/workshops")
+async def get_pp_workshops(
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get all workshops with their status and progress"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    workshops = await db.pp_workshops.find(
+        {"program_id": program["id"]},
+        {"_id": 0}
+    ).sort("workshop_number", 1).to_list(100)
+    
+    # Enrich with definitions and item progress
+    result = []
+    for ws in workshops:
+        ws_def = next((d for d in WORKSHOP_DEFINITIONS if d["workshop_number"] == ws["workshop_number"]), None)
+        
+        # Get items for this workshop
+        items = await db.pp_item_instances.find(
+            {"program_id": program["id"], "workshop_number": ws["workshop_number"]},
+            {"_id": 0}
+        ).to_list(100)
+        
+        items_total = len(items)
+        items_done = sum(1 for i in items if i["status"] in ["done", "validated"])
+        
+        # Get actions count for this workshop
+        actions = await db.pp_actions.find(
+            {"program_id": program["id"], "workshop_number": ws["workshop_number"], "status": {"$in": ["open", "in_progress"]}},
+            {"_id": 0}
+        ).to_list(1000)
+        
+        # Get decisions count for this workshop
+        decisions = await db.pp_decisions.find(
+            {"program_id": program["id"], "workshop_number": ws["workshop_number"]},
+            {"_id": 0}
+        ).to_list(1000)
+        
+        result.append({
+            **ws,
+            "title": ws_def["title"] if ws_def else "",
+            "description": ws_def["description"] if ws_def else "",
+            "completion_criteria": ws_def["completion_criteria"] if ws_def else [],
+            "items_total": items_total,
+            "items_done": items_done,
+            "items_progress_pct": round(items_done / items_total * 100, 1) if items_total > 0 else 0,
+            "open_actions_count": len(actions),
+            "decisions_count": len(decisions)
+        })
+    
+    return result
+
+@api_router.get("/power-platform/workshops/{workshop_number}")
+async def get_pp_workshop_detail(
+    workshop_number: int,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get detailed workshop with items"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    workshop = await db.pp_workshops.find_one(
+        {"program_id": program["id"], "workshop_number": workshop_number},
+        {"_id": 0}
+    )
+    
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Atelier non trouvé")
+    
+    ws_def = next((d for d in WORKSHOP_DEFINITIONS if d["workshop_number"] == workshop_number), None)
+    
+    # Get items with definitions
+    items = await db.pp_item_instances.find(
+        {"program_id": program["id"], "workshop_number": workshop_number},
+        {"_id": 0}
+    ).to_list(100)
+    
+    enriched_items = []
+    for item in items:
+        item_def = next((d for d in ITEM_DEFINITIONS if d["item_id"] == item["item_id"]), None)
+        enriched_items.append({
+            **item,
+            "title": item_def["title"] if item_def else "",
+            "module_name": item_def["module_name"] if item_def else "",
+            "status_requirement": item_def["status_requirement"] if item_def else "",
+            "user_story_fr": item_def["user_story_fr"] if item_def else "",
+            "acceptance_criteria": item_def["acceptance_criteria"] if item_def else []
+        })
+    
+    return {
+        **workshop,
+        "title": ws_def["title"] if ws_def else "",
+        "description": ws_def["description"] if ws_def else "",
+        "completion_criteria": ws_def["completion_criteria"] if ws_def else [],
+        "items": enriched_items
+    }
+
+@api_router.patch("/power-platform/workshops/{workshop_number}")
+async def update_pp_workshop(
+    workshop_number: int,
+    update: PPWorkshopUpdate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Update workshop status or completion criteria"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    update_data = {}
+    if update.status:
+        update_data["status"] = update.status
+        if update.status == "in_progress" and not await db.pp_workshops.find_one(
+            {"program_id": program["id"], "workshop_number": workshop_number, "started_at": {"$ne": None}}
+        ):
+            update_data["started_at"] = datetime.now(timezone.utc).isoformat()
+    
+    if update.completion_criteria_state:
+        update_data["completion_criteria_state"] = update.completion_criteria_state
+    
+    if update_data:
+        await db.pp_workshops.update_one(
+            {"program_id": program["id"], "workshop_number": workshop_number},
+            {"$set": update_data}
+        )
+    
+    # Check if workshop should be completed
+    await check_workshop_completion(program["id"], workshop_number)
+    
+    return await db.pp_workshops.find_one(
+        {"program_id": program["id"], "workshop_number": workshop_number},
+        {"_id": 0}
+    )
+
+@api_router.get("/power-platform/items")
+async def get_pp_items(
+    workshop_number: Optional[int] = None,
+    status: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get item instances with optional filters"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    query = {"program_id": program["id"]}
+    if workshop_number:
+        query["workshop_number"] = workshop_number
+    if status:
+        query["status"] = status
+    
+    items = await db.pp_item_instances.find(query, {"_id": 0}).to_list(1000)
+    
+    # Enrich with definitions
+    enriched_items = []
+    for item in items:
+        item_def = next((d for d in ITEM_DEFINITIONS if d["item_id"] == item["item_id"]), None)
+        enriched_items.append({
+            **item,
+            "title": item_def["title"] if item_def else "",
+            "module_name": item_def["module_name"] if item_def else "",
+            "status_requirement": item_def["status_requirement"] if item_def else "",
+            "user_story_fr": item_def["user_story_fr"] if item_def else "",
+            "acceptance_criteria": item_def["acceptance_criteria"] if item_def else []
+        })
+    
+    return enriched_items
+
+@api_router.get("/power-platform/items/{item_id}")
+async def get_pp_item(
+    item_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get a specific item instance"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    item = await db.pp_item_instances.find_one(
+        {"program_id": program["id"], "item_id": item_id},
+        {"_id": 0}
+    )
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item non trouvé")
+    
+    item_def = next((d for d in ITEM_DEFINITIONS if d["item_id"] == item_id), None)
+    
+    return {
+        **item,
+        "title": item_def["title"] if item_def else "",
+        "module_name": item_def["module_name"] if item_def else "",
+        "status_requirement": item_def["status_requirement"] if item_def else "",
+        "user_story_fr": item_def["user_story_fr"] if item_def else "",
+        "acceptance_criteria": item_def["acceptance_criteria"] if item_def else []
+    }
+
+@api_router.patch("/power-platform/items/{item_id}")
+async def update_pp_item(
+    item_id: str,
+    update: PPItemInstanceUpdate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Update an item instance"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if update.status is not None:
+        update_data["status"] = update.status
+    if update.owner_user_id is not None:
+        update_data["owner_user_id"] = update.owner_user_id
+    if update.due_date is not None:
+        update_data["due_date"] = update.due_date
+    if update.notes_markdown is not None:
+        update_data["notes_markdown"] = update.notes_markdown
+    if update.acceptance_state is not None:
+        update_data["acceptance_state"] = update.acceptance_state
+    if update.done_override is not None:
+        update_data["done_override"] = update.done_override
+    
+    await db.pp_item_instances.update_one(
+        {"program_id": program["id"], "item_id": item_id},
+        {"$set": update_data}
+    )
+    
+    # Get item to check workshop completion
+    item = await db.pp_item_instances.find_one(
+        {"program_id": program["id"], "item_id": item_id},
+        {"_id": 0}
+    )
+    
+    if item:
+        await check_workshop_completion(program["id"], item["workshop_number"])
+    
+    return await db.pp_item_instances.find_one(
+        {"program_id": program["id"], "item_id": item_id},
+        {"_id": 0}
+    )
+
+@api_router.post("/power-platform/items/{item_id}/validate")
+async def validate_pp_item(
+    item_id: str,
+    validation: PPItemInstanceValidate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Validate or unvalidate an item"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    if validation.validated:
+        update_data = {
+            "status": "validated",
+            "validated_by": current_user.id,
+            "validated_at": now,
+            "updated_at": now
+        }
+    else:
+        update_data = {
+            "status": "done",
+            "validated_by": None,
+            "validated_at": None,
+            "updated_at": now
+        }
+    
+    await db.pp_item_instances.update_one(
+        {"program_id": program["id"], "item_id": item_id},
+        {"$set": update_data}
+    )
+    
+    item = await db.pp_item_instances.find_one(
+        {"program_id": program["id"], "item_id": item_id},
+        {"_id": 0}
+    )
+    
+    if item:
+        await check_workshop_completion(program["id"], item["workshop_number"])
+    
+    return item
+
+# Actions CRUD
+@api_router.get("/power-platform/actions")
+async def get_pp_actions(
+    workshop_number: Optional[int] = None,
+    item_id: Optional[str] = None,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get actions with optional filters"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    query = {"program_id": program["id"]}
+    if workshop_number is not None:
+        query["workshop_number"] = workshop_number
+    if item_id:
+        query["item_id"] = item_id
+    if status:
+        query["status"] = status
+    if priority:
+        query["priority"] = priority
+    
+    actions = await db.pp_actions.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    
+    # Calculate ageing for each action
+    now = datetime.now(timezone.utc)
+    for action in actions:
+        try:
+            created = datetime.fromisoformat(action["created_at"].replace("Z", "+00:00"))
+            action["ageing_days"] = (now - created).days
+        except:
+            action["ageing_days"] = 0
+    
+    return actions
+
+@api_router.post("/power-platform/actions")
+async def create_pp_action(
+    action: PPActionCreate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Create a new action"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    now = datetime.now(timezone.utc).isoformat()
+    new_action = {
+        "id": str(uuid.uuid4()),
+        "program_id": program["id"],
+        "workshop_number": action.workshop_number,
+        "item_id": action.item_id,
+        "title": action.title,
+        "description": action.description,
+        "priority": action.priority,
+        "status": "open",
+        "owner_user_id": action.owner_user_id,
+        "due_date": action.due_date,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.pp_actions.insert_one(new_action)
+    return new_action
+
+@api_router.patch("/power-platform/actions/{action_id}")
+async def update_pp_action(
+    action_id: str,
+    update: PPActionUpdate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Update an action"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if update.title is not None:
+        update_data["title"] = update.title
+    if update.description is not None:
+        update_data["description"] = update.description
+    if update.priority is not None:
+        update_data["priority"] = update.priority
+    if update.status is not None:
+        update_data["status"] = update.status
+    if update.owner_user_id is not None:
+        update_data["owner_user_id"] = update.owner_user_id
+    if update.due_date is not None:
+        update_data["due_date"] = update.due_date
+    
+    await db.pp_actions.update_one(
+        {"id": action_id, "program_id": program["id"]},
+        {"$set": update_data}
+    )
+    
+    return await db.pp_actions.find_one({"id": action_id}, {"_id": 0})
+
+@api_router.delete("/power-platform/actions/{action_id}")
+async def delete_pp_action(
+    action_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Delete an action"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    await db.pp_actions.delete_one({"id": action_id, "program_id": program["id"]})
+    return {"deleted": True}
+
+# Decisions CRUD
+@api_router.get("/power-platform/decisions")
+async def get_pp_decisions(
+    workshop_number: Optional[int] = None,
+    item_id: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get decisions with optional filters"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    query = {"program_id": program["id"]}
+    if workshop_number is not None:
+        query["workshop_number"] = workshop_number
+    if item_id:
+        query["item_id"] = item_id
+    
+    return await db.pp_decisions.find(query, {"_id": 0}).sort("decided_at", -1).to_list(10000)
+
+@api_router.post("/power-platform/decisions")
+async def create_pp_decision(
+    decision: PPDecisionCreate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Create a new decision"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    now = datetime.now(timezone.utc).isoformat()
+    new_decision = {
+        "id": str(uuid.uuid4()),
+        "program_id": program["id"],
+        "workshop_number": decision.workshop_number,
+        "item_id": decision.item_id,
+        "decision_text": decision.decision_text,
+        "decided_by": current_user.id,
+        "decided_at": now,
+        "evidence_links": decision.evidence_links,
+        "created_at": now
+    }
+    
+    await db.pp_decisions.insert_one(new_decision)
+    return new_decision
+
+@api_router.delete("/power-platform/decisions/{decision_id}")
+async def delete_pp_decision(
+    decision_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Delete a decision"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    await db.pp_decisions.delete_one({"id": decision_id, "program_id": program["id"]})
+    return {"deleted": True}
+
+# Evidence CRUD
+@api_router.get("/power-platform/evidence")
+async def get_pp_evidence(
+    workshop_number: Optional[int] = None,
+    item_id: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Get evidence with optional filters"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    query = {"program_id": program["id"]}
+    if workshop_number is not None:
+        query["workshop_number"] = workshop_number
+    if item_id:
+        query["item_id"] = item_id
+    
+    return await db.pp_evidence.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
+
+@api_router.post("/power-platform/evidence")
+async def create_pp_evidence(
+    evidence: PPEvidenceCreate,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Create new evidence"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    
+    now = datetime.now(timezone.utc).isoformat()
+    new_evidence = {
+        "id": str(uuid.uuid4()),
+        "program_id": program["id"],
+        "workshop_number": evidence.workshop_number,
+        "item_id": evidence.item_id,
+        "evidence_type": evidence.evidence_type,
+        "title": evidence.title,
+        "url": evidence.url,
+        "file_id": None,
+        "date": now,
+        "owner_user_id": current_user.id,
+        "created_at": now
+    }
+    
+    await db.pp_evidence.insert_one(new_evidence)
+    return new_evidence
+
+@api_router.delete("/power-platform/evidence/{evidence_id}")
+async def delete_pp_evidence(
+    evidence_id: str,
+    tenant_id: str = Depends(get_tenant_id),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    """Delete evidence"""
+    program = await get_or_create_program(tenant_id, current_user.id)
+    await db.pp_evidence.delete_one({"id": evidence_id, "program_id": program["id"]})
+    return {"deleted": True}
+
+# Workshop definitions (static)
+@api_router.get("/power-platform/definitions/workshops")
+async def get_pp_workshop_definitions():
+    """Get workshop definitions"""
+    return WORKSHOP_DEFINITIONS
+
+@api_router.get("/power-platform/definitions/items")
+async def get_pp_item_definitions(workshop_number: Optional[int] = None):
+    """Get item definitions"""
+    if workshop_number:
+        return get_items_for_workshop(workshop_number)
+    return ITEM_DEFINITIONS
 
 # Include the router
 app.include_router(api_router)
