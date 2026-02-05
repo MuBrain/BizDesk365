@@ -180,18 +180,18 @@ class TestPowerPlatformItems:
             assert item["workshop_number"] == 1
     
     def test_get_item_detail(self, auth_headers):
-        """GET /api/power-platform/items/1.1 - Get item detail"""
-        response = requests.get(f"{BASE_URL}/api/power-platform/items/1.1", headers=auth_headers)
+        """GET /api/power-platform/items/A1-01 - Get item detail"""
+        response = requests.get(f"{BASE_URL}/api/power-platform/items/A1-01", headers=auth_headers)
         assert response.status_code == 200, f"Failed: {response.text}"
         data = response.json()
-        assert data["item_id"] == "1.1"
+        assert data["item_id"] == "A1-01"
         assert "title" in data
         assert "module_name" in data
     
     def test_update_item(self, auth_headers):
-        """PATCH /api/power-platform/items/1.1 - Update item"""
+        """PATCH /api/power-platform/items/A1-01 - Update item"""
         response = requests.patch(
-            f"{BASE_URL}/api/power-platform/items/1.1",
+            f"{BASE_URL}/api/power-platform/items/A1-01",
             headers=auth_headers,
             json={
                 "status": "in_progress",
@@ -205,7 +205,7 @@ class TestPowerPlatformItems:
         assert data["owner_user_id"] == "TEST_user"
         
         # Verify persistence
-        verify_response = requests.get(f"{BASE_URL}/api/power-platform/items/1.1", headers=auth_headers)
+        verify_response = requests.get(f"{BASE_URL}/api/power-platform/items/A1-01", headers=auth_headers)
         verify_data = verify_response.json()
         assert verify_data["status"] == "in_progress"
 
