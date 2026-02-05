@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,24 +39,20 @@ export default function PPDecisions() {
   const [decisions, setDecisions] = useState([]);
   const [workshops, setWorkshops] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newDecision, setNewDecision] = useState({
-    decision_text: "",
-    workshop_number: null,
-    evidence_links: []
-  });
+  const [newDecisionText, setNewDecisionText] = useState("");
+  const [newDecisionWorkshop, setNewDecisionWorkshop] = useState("null");
+  const [newDecisionLinks, setNewDecisionLinks] = useState("");
   const [saving, setSaving] = useState(false);
   const [filterWorkshop, setFilterWorkshop] = useState("all");
 
-  useEffect(() => {
+  useEffect(function() {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async function() {
     try {
-      const [decisionsRes, workshopsRes] = await Promise.all([
-        axios.get("/power-platform/decisions"),
-        axios.get("/power-platform/workshops")
-      ]);
+      const decisionsRes = await axios.get("/power-platform/decisions");
+      const workshopsRes = await axios.get("/power-platform/workshops");
       setDecisions(decisionsRes.data);
       setWorkshops(workshopsRes.data);
     } catch (error) {
@@ -67,27 +63,28 @@ export default function PPDecisions() {
     }
   };
 
-  const openCreateDialog = () => {
-    setNewDecision({
-      decision_text: "",
-      workshop_number: null,
-      evidence_links: []
-    });
+  const openCreateDialog = function() {
+    setNewDecisionText("");
+    setNewDecisionWorkshop("null");
+    setNewDecisionLinks("");
     setDialogOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!newDecision.decision_text) {
+  const handleSave = async function() {
+    if (!newDecisionText) {
       toast.error("Le texte de la décision est requis");
       return;
     }
     
     setSaving(true);
     try {
+      const wsNum = newDecisionWorkshop === "null" ? null : parseInt(newDecisionWorkshop);
+      const links = newDecisionLinks.split("\n").filter(function(l) { return l.trim(); });
+      
       await axios.post("/power-platform/decisions", {
-        decision_text: newDecision.decision_text,
-        workshop_number: newDecision.workshop_number === "null" ? null : newDecision.workshop_number ? parseInt(newDecision.workshop_number) : null,
-        evidence_links: newDecision.evidence_links.filter(l => l.trim())
+        decision_text: newDecisionText,
+        workshop_number: wsNum,
+        evidence_links: links
       });
       toast.success("Décision enregistrée");
       setDialogOpen(false);
@@ -99,11 +96,11 @@ export default function PPDecisions() {
     }
   };
 
-  const handleDelete = async (decisionId) => {
+  const handleDelete = async function(decisionId) {
     if (!confirm("Supprimer cette décision ?")) return;
     
     try {
-      await axios.delete(`/power-platform/decisions/${decisionId}`);
+      await axios.delete("/power-platform/decisions/" + decisionId);
       toast.success("Décision supprimée");
       fetchData();
     } catch (error) {
@@ -111,11 +108,11 @@ export default function PPDecisions() {
     }
   };
 
-  const filteredDecisions = filterWorkshop === "all" 
-    ? decisions 
-    : filterWorkshop === "none"
-      ? decisions.filter(d => !d.workshop_number)
-      : decisions.filter(d => d.workshop_number === parseInt(filterWorkshop));
+  const filteredDecisions = decisions.filter(function(d) {
+    if (filterWorkshop === "all") return true;
+    if (filterWorkshop === "none") return !d.workshop_number;
+    return d.workshop_number === parseInt(filterWorkshop);
+  });
 
   if (loading) {
     return (
@@ -167,11 +164,13 @@ export default function PPDecisions() {
               <SelectContent>
                 <SelectItem value="all">Tous</SelectItem>
                 <SelectItem value="none">Non lié</SelectItem>
-                {workshops.map(ws => (
-                  <SelectItem key={ws.workshop_number} value={ws.workshop_number.toString()}>
-                    Atelier {ws.workshop_number}
-                  </SelectItem>
-                ))}
+                {workshops.map(function(ws) {
+                  return (
+                    <SelectItem key={ws.workshop_number} value={ws.workshop_number.toString()}>
+                      Atelier {ws.workshop_number}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -192,55 +191,60 @@ export default function PPDecisions() {
             </CardContent>
           </Card>
         ) : (
-          filteredDecisions.map((decision) => (
-            <Card key={decision.id} className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="py-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      {decision.workshop_number && (
-                        <Badge variant="outline">Atelier {decision.workshop_number}</Badge>
-                      )}
-                      <span className="text-sm text-slate-500 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(decision.decided_at).toLocaleDateString("fr-FR")}
-                      </span>
-                      <span className="text-sm text-slate-500 flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        {decision.decided_by}
-                      </span>
-                    </div>
-                    <p className="text-slate-900 whitespace-pre-wrap">{decision.decision_text}</p>
-                    
-                    {decision.evidence_links && decision.evidence_links.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {decision.evidence_links.map((link, index) => (
-                          <a 
-                            key={index}
-                            href={link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            Preuve {index + 1}
-                          </a>
-                        ))}
+          filteredDecisions.map(function(decision) {
+            const evidenceLinks = decision.evidence_links || [];
+            return (
+              <Card key={decision.id} className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="py-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        {decision.workshop_number && (
+                          <Badge variant="outline">Atelier {decision.workshop_number}</Badge>
+                        )}
+                        <span className="text-sm text-slate-500 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(decision.decided_at).toLocaleDateString("fr-FR")}
+                        </span>
+                        <span className="text-sm text-slate-500 flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          {decision.decided_by}
+                        </span>
                       </div>
-                    )}
+                      <p className="text-slate-900 whitespace-pre-wrap">{decision.decision_text}</p>
+                      
+                      {evidenceLinks.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {evidenceLinks.map(function(link, index) {
+                            return (
+                              <a 
+                                key={index}
+                                href={link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                Preuve {index + 1}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={function() { handleDelete(decision.id); }}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(decision.id)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
 
@@ -258,8 +262,8 @@ export default function PPDecisions() {
             <div className="space-y-2">
               <Label>Décision *</Label>
               <Textarea
-                value={newDecision.decision_text}
-                onChange={(e) => setNewDecision(prev => ({...prev, decision_text: e.target.value}))}
+                value={newDecisionText}
+                onChange={function(e) { setNewDecisionText(e.target.value); }}
                 placeholder="Décrivez la décision prise..."
                 rows={4}
               />
@@ -267,20 +271,19 @@ export default function PPDecisions() {
             
             <div className="space-y-2">
               <Label>Atelier lié</Label>
-              <Select
-                value={newDecision.workshop_number?.toString() || "null"}
-                onValueChange={(value) => setNewDecision(prev => ({...prev, workshop_number: value}))}
-              >
+              <Select value={newDecisionWorkshop} onValueChange={setNewDecisionWorkshop}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="null">Aucun</SelectItem>
-                  {workshops.map(ws => (
-                    <SelectItem key={ws.workshop_number} value={ws.workshop_number.toString()}>
-                      Atelier {ws.workshop_number}: {ws.title}
-                    </SelectItem>
-                  ))}
+                  {workshops.map(function(ws) {
+                    return (
+                      <SelectItem key={ws.workshop_number} value={ws.workshop_number.toString()}>
+                        Atelier {ws.workshop_number}: {ws.title}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -288,8 +291,8 @@ export default function PPDecisions() {
             <div className="space-y-2">
               <Label>Liens vers les preuves (optionnel)</Label>
               <Input
-                value={newDecision.evidence_links.join("\n")}
-                onChange={(e) => setNewDecision(prev => ({...prev, evidence_links: e.target.value.split("\n")}))}
+                value={newDecisionLinks}
+                onChange={function(e) { setNewDecisionLinks(e.target.value); }}
                 placeholder="Un lien par ligne"
               />
               <p className="text-xs text-slate-500">Ajoutez des URLs vers les documents de preuve</p>
@@ -297,15 +300,15 @@ export default function PPDecisions() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button variant="outline" onClick={function() { setDialogOpen(false); }}>
               Annuler
             </Button>
             <Button onClick={handleSave} disabled={saving} className="bg-amber-500 hover:bg-amber-600">
               {saving ? (
-                <>
+                <span className="flex items-center">
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Enregistrement...
-                </>
+                </span>
               ) : (
                 "Enregistrer"
               )}
