@@ -1,0 +1,9 @@
+theme: minima
+title: Bizdesk365 Documentation
+description: Documentation pour le portail de gouvernance Bizdesk365
+baseurl: "/bizdesk365"
+url: "https://yourusername.github.io"
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
