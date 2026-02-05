@@ -1,0 +1,161 @@
+{
+  "identity": {
+    "name": "Bizdesk365",
+    "persona": "E1 - The Anti-AI Designer",
+    "tone": "Professional, Secure, Trustworthy, Swiss Precision",
+    "language": "fr-FR"
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Manrope, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "weights": {
+      "headings": "font-semibold",
+      "body": "font-normal",
+      "bold": "font-bold"
+    },
+    "sizes": {
+      "h1": "text-3xl md:text-4xl tracking-tight",
+      "h2": "text-2xl md:text-3xl tracking-tight",
+      "h3": "text-xl md:text-2xl tracking-tight",
+      "body": "text-sm md:text-base leading-relaxed",
+      "small": "text-xs text-muted-foreground"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "DEFAULT": "#0F172A",
+        "foreground": "#F8FAFC"
+      },
+      "secondary": {
+        "DEFAULT": "#F1F5F9",
+        "foreground": "#0F172A"
+      },
+      "accent": {
+        "DEFAULT": "#2563EB",
+        "foreground": "#FFFFFF"
+      },
+      "background": "#F8FAFC",
+      "card": "#FFFFFF",
+      "border": "#E2E8F0",
+      "muted": "#64748B"
+    },
+    "semantic": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "destructive": "#EF4444",
+      "info": "#3B82F6"
+    },
+    "gradients": {
+      "login_overlay": "linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.8) 100%)"
+    }
+  },
+  "layout": {
+    "grid_system": "Bento Grid Mode B (High Density)",
+    "spacing": {
+      "container_padding": "p-6 md:p-8",
+      "card_padding": "p-6",
+      "gap": "gap-6"
+    },
+    "sidebar": {
+      "width": "w-64",
+      "background": "bg-slate-900",
+      "text": "text-slate-300",
+      "active_item": "bg-slate-800 text-white border-l-4 border-blue-500"
+    },
+    "border_radius": {
+      "card": "rounded-lg",
+      "button": "rounded-md",
+      "input": "rounded-md"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all",
+      "secondary": "bg-white border border-slate-200 hover:bg-slate-50 text-slate-900 shadow-sm",
+      "ghost": "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
+    },
+    "cards": {
+      "default": "bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-200",
+      "metric": "flex flex-col justify-between p-6 h-full"
+    },
+    "charts": {
+      "library": "recharts",
+      "style": "minimalist, thin strokes, rounded bars",
+      "colors": ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"]
+    },
+    "tables": {
+      "style": "dense, border-b border-slate-100",
+      "header": "bg-slate-50 text-xs font-medium text-slate-500 uppercase tracking-wider"
+    }
+  },
+  "visual_enhancers": {
+    "shadows": {
+      "card": "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)",
+      "dropdown": "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)"
+    },
+    "glassmorphism": {
+      "header": "bg-white/80 backdrop-blur-md border-b border-slate-200/50"
+    }
+  },
+  "image_urls": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1736195675963-8afff9103f49?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHRlY2hub2xvZ3klMjBuZXR3b3JrJTIwc3VidGxlJTIwYmFja2dyb3VuZCUyMHdoaXRlfGVufDB8fHx8MTc3MDI1MzE5OXww&ixlib=rb-4.1.0&q=85",
+      "description": "Subtle network pattern for login page background",
+      "category": "background"
+    },
+    "user_avatar": {
+      "url": "https://images.unsplash.com/photo-1689600944138-da3b150d9cb8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1NzZ8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMHBvcnRyYWl0JTIwaGVhZHNob3R8ZW58MHx8fHwxNzcwMjUzMTk3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Professional user avatar for dashboard header",
+      "category": "avatar"
+    }
+  },
+  "instructions_to_main_agent": {
+    "general": "Build a professional, multi-tenant SaaS dashboard in French. Use the 'Swiss & High-Contrast' design archetype. Prioritize clarity, data density, and trust.",
+    "language": "All UI text MUST be in French (fr-FR).",
+    "theme": "Default to Light Mode. Use Slate-900 for the sidebar to create a strong anchor. Use Blue-600 for primary actions.",
+    "layout_rules": [
+      "Use a fixed left sidebar navigation.",
+      "Use a top header for global search, notifications, and user profile.",
+      "Use a 'Bento' grid layout for dashboard widgets.",
+      "Ensure all cards have consistent padding (p-6) and subtle borders."
+    ],
+    "component_overrides": [
+      "Customize Shadcn cards to remove heavy shadows and use 1px borders.",
+      "Use 'Manrope' font for all headings.",
+      "Use 'Inter' font for all body text.",
+      "Ensure tables are dense and easy to scan."
+    ],
+    "pages": {
+      "login": "Clean, split-screen layout. Left side: Login form. Right side: Abstract network background with a dark overlay and a quote or value prop.",
+      "dashboard_home": "Overview of all modules. KPI cards at the top. Recent activity list.",
+      "compliance": "ISO maturity score (Radial Chart). List of recent audits. Compliance status by department.",
+      "enterprise_brain": "IQI Score (Gauge Chart). Document processing status. AI usage badges.",
+      "ai_governance": "Executive view. Authorized vs Blocked AI (Pie Chart). Critical actions list (Red accents).",
+      "settings": "Tabbed interface. Toggles for ISO modules. Sliders for AI thresholds."
+    }
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯📚🎭🎬🎪🎉🎊🎁🎀🎂🍰🎈🎨🎰💰💵💳🏦💎🪙💸🤑📊📈📉💹🔢🏆🥇 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Create new components that match the style and conventions of existing components when needed",
+    "Examine existing components to understand the project's component patterns before creating new ones",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use sonner for toasts. Sonner component are located in /app/src/components/ui/sonner.tsx"
+  ]
+}
