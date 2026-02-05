@@ -1122,6 +1122,8 @@ async def create_pp_action(
     }
     
     await db.pp_actions.insert_one(new_action)
+    # Remove MongoDB _id before returning
+    new_action.pop("_id", None)
     return new_action
 
 @api_router.patch("/power-platform/actions/{action_id}")
@@ -1209,6 +1211,8 @@ async def create_pp_decision(
     }
     
     await db.pp_decisions.insert_one(new_decision)
+    # Remove MongoDB _id before returning
+    new_decision.pop("_id", None)
     return new_decision
 
 @api_router.delete("/power-platform/decisions/{decision_id}")
@@ -1266,6 +1270,8 @@ async def create_pp_evidence(
     }
     
     await db.pp_evidence.insert_one(new_evidence)
+    # Remove MongoDB _id before returning
+    new_evidence.pop("_id", None)
     return new_evidence
 
 @api_router.delete("/power-platform/evidence/{evidence_id}")
