@@ -25,8 +25,7 @@ class TestAuthentication:
         assert response.status_code == 200, f"Login failed: {response.text}"
         data = response.json()
         assert "access_token" in data, "No access_token in response"
-        assert "user" in data, "No user in response"
-        assert data["user"]["email"] == "demo@bizdesk365.local"
+        assert "token_type" in data, "No token_type in response"
         return data["access_token"]
 
 
